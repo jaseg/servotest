@@ -41,41 +41,60 @@ int main(void) {
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_TIM1EN;
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
-    GPIOB->CRH &=
-          ~GPIO_CRH_CNF9_Msk;
-    GPIOB->CRH |=
-          (2<<GPIO_CRH_CNF9_Pos); /* input with pull-up/down */
-    GPIOB->BSRR |=
-          GPIO_BSRR_BR9; /* pull-down */
+    struct channel {
+        GPIO_TypeDef *gpio;
+        int pin;
+    };
+    struct channel channels[] = {
+        {GPIOB, 9},
+        {GPIOB, 8},
+        {GPIOB, 7},
+        {GPIOB, 6}};
+#define NCH (sizeof(channels)/sizeof(channels[0]))
+
+    for (int i=0; i<NCH; i++) {
+        GPIO_TypeDef *gpio = channels[i].gpio;
+        int pin = channels[i].pin;
+        if (pin < 8) {
+            gpio->CRL &= ~(0xf<<(pin*4));
+            gpio->CRL |= (0x8<<(pin*4)); /* input with pull-up/down */
+        } else {
+            gpio->CRH &= ~(0xf<<((pin-8)*4));
+            gpio->CRH |= (0x8<<((pin-8)*4)); /* input with pull-up/down */
+        }
+        gpio->BSRR |= 1<<16<<pin; /* pull-down */
+    }
 
     TIM1->CR1 = TIM_CR1_CEN;
     TIM1->PSC = 32; /* Count at 1MHz */
 
     SysTick_Config(SystemCoreClock/1000); /* 1ms interval */
-    int gpio_lastval = 0;
-    bool debounce_low = false;
-    bool debounce_high = false;
+    uint32_t debounce_low = 0;
+    uint32_t debounce_high = 0;
+    uint32_t gpio_lastval = 0;
+    uint16_t last[NCH] = {0};
+    uint16_t diff[NCH] = {0};
     while (42) {
-        static uint16_t start __attribute__((used));
-        static uint16_t end __attribute__((used));
-        static uint16_t diff __attribute__((used));
-        int gpio_val = GPIOB->IDR & (1<<9);
         uint16_t now = TIM1->CNT;
-        if (gpio_val && !gpio_lastval && debounce_low) {
-            gpio_lastval = gpio_val;
-            start = now;
-            debounce_high = false;
-        } else if (!gpio_val && gpio_lastval && debounce_high) {
-            gpio_lastval = gpio_val;
-            end = now;
-            diff = end-start;
-            debounce_low = false;
-        }
+        for (int i=0; i<NCH; i++) {
+            uint32_t mask = 1<<i;
+            int gpio_val = channels[i].gpio->IDR & (1<<channels[i].pin);
+            if (gpio_val && !(gpio_lastval&mask) && debounce_low) {
+                gpio_lastval |= mask;
+                debounce_high &= ~mask;
+                last[i] = now;
+            } else if (!gpio_val && (gpio_lastval&mask) && debounce_high) {
+                gpio_lastval &= ~mask;
+                debounce_low &= ~mask;
+                diff[i] = now-last[i];
+                last[i] = now;
+            }
 
-        if ((uint16_t)(now-end) > 1000)
-            debounce_low = true;
-        if ((uint16_t)(now-start) > 100)
-            debounce_high = true;
+            if ((uint16_t)(now-last[i]) > 1000)
+                debounce_low |= mask;
+            if ((uint16_t)(now-last[i]) > 100)
+                debounce_high |= mask;
+        }
     }
 }
 
