@@ -31,6 +31,9 @@ CFLAGS += -I$(CMSIS_DEV_PATH)/Include -I$(CMSIS_PATH)/Include -I$(HAL_PATH)/Inc 
 
 all: main.elf main.pdf
 
+cmsis_exports.c: $(CMSIS_DEV_PATH)/Include/stm32f103xb.h $(CMSIS_PATH)/Include/core_cm3.h
+	python3 gen_cmsis_exports.py $^ > $@
+
 %.o: %.c
 	$(CC) -c $(CFLAGS) -o $@ $^
 	$(CC) -E $(CFLAGS) -o $(@:.o=.pp) $^
@@ -42,7 +45,7 @@ all: main.elf main.pdf
 %.dot: %.elf
 	r2 -a arm -qc 'aa;agC' $< 2>/dev/null >$@
 
-main.elf: main.o startup_stm32f103xb.o system_stm32f1xx.o $(HAL_PATH)/Src/stm32f1xx_ll_utils.o
+main.elf: main.o startup_stm32f103xb.o system_stm32f1xx.o $(HAL_PATH)/Src/stm32f1xx_ll_utils.o cmsis_exports.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 	$(OBJCOPY) -O ihex $@ $(@:.elf=.hex)
 	$(OBJCOPY) -O binary $@ $(@:.elf=.bin)

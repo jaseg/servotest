@@ -18,11 +18,6 @@
 
 static volatile unsigned int sys_time;
 
-static GPIO_TypeDef *gpiob = GPIOB;
-static TIM_TypeDef *tim1 = TIM1;
-static RCC_TypeDef *rcc = RCC;
-static SysTick_Type *systick = SysTick;
-
 #define PIN_IN_START 5
 #define NCH_IN 5
 
@@ -157,13 +152,14 @@ int main(void) {
         for (int i=0; i<NCH_IN; i++) {
             uint32_t mask = 1<<i;
             if (gpio_vals & (1<<(i+PIN_IN_START))) {
-                if (!(gpio_lastval&mask) && (debounce&mask)) {
+                if (~gpio_lastval & debounce &mask) {
                     gpio_lastval |= mask;
                     debounce &= ~mask;
                     last[i] = now;
                 }
             } else {
-                if ((gpio_lastval&mask) && (debounce&mask)) {
+                //if ((gpio_lastval&mask) && (debounce&mask)) {
+                if (gpio_lastval & debounce & mask) {
                     gpio_lastval &= ~mask;
                     debounce &= ~mask;
                     diff[i] = now-last[i];
