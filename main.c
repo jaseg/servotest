@@ -114,11 +114,10 @@ int main(void) {
     //    | (4<<RCC_CFGR_PPRE1_Pos) | (4<<RCC_CFGR_PPRE2_Pos);
     SystemCoreClockUpdate();
 
-    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_TIM1EN;
+    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN | RCC_APB2ENR_TIM1EN;
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
     for (int pin=PIN_IN_START; pin<PIN_IN_START+NCH_IN; pin++) {
-        resetmask |= 1<<pin;
         if (pin < 8) {
             GPIOB->CRL &= ~(0xf<<(pin*4));
             GPIOB->CRL |= (0x8<<(pin*4)); /* input with pull-up/down */
@@ -126,7 +125,18 @@ int main(void) {
             GPIOB->CRH &= ~(0xf<<((pin-8)*4));
             GPIOB->CRH |= (0x8<<((pin-8)*4)); /* input with pull-up/down */
         }
-        GPIOB->BSRR |= 1<<16<<pin; /* pull-down */
+        GPIOB->ODR |= 1<<pin; /* pull-down */
+    }
+
+    for (int pin=PIN_OUT_START; pin<PIN_OUT_START+NCH_OUT; pin++) {
+        resetmask |= 1<<pin;
+        if (pin < 8) {
+            GPIOA->CRL &= ~(0xf<<(pin*4));
+            GPIOA->CRL |= (0x1<<(pin*4)); /* push/pull general purpose output */
+        } else {
+            GPIOA->CRH &= ~(0xf<<((pin-8)*4));
+            GPIOA->CRH |= (0x1<<((pin-8)*4)); /* push/pull general purpose output */
+        }
     }
 
     TIM1->CR1 = TIM_CR1_CEN;
@@ -185,7 +195,10 @@ int main(void) {
         } else {
             sel = -1;
         }
-        switch (sel) {
+        /* FIXME DEBUG */
+        static int gsel = 0;
+        diff[0] = diff[1] = diff[2] = diff[3] = diff[4];
+        switch (gsel) {
         case 0:
             duration_out_write[ 0] = diff[0];
             duration_out_write[ 1] = diff[1];
@@ -229,6 +242,18 @@ int main(void) {
             duration_out_write[11] = diff[3];
             break;
         default:
+            duration_out_write[ 0] = duration_out_read[ 0];
+            duration_out_write[ 1] = duration_out_read[ 1];
+            duration_out_write[ 2] = duration_out_read[ 2];
+            duration_out_write[ 3] = duration_out_read[ 3];
+            duration_out_write[ 4] = duration_out_read[ 4];
+            duration_out_write[ 5] = duration_out_read[ 5];
+            duration_out_write[ 6] = duration_out_read[ 6];
+            duration_out_write[ 7] = duration_out_read[ 7];
+            duration_out_write[ 8] = duration_out_read[ 8];
+            duration_out_write[ 9] = duration_out_read[ 9];
+            duration_out_write[10] = duration_out_read[10];
+            duration_out_write[11] = duration_out_read[11];
             break;
         }
         uint16_t *tmp = duration_out_read;
