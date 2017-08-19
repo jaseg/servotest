@@ -95,6 +95,11 @@ void TIM1_CC_IRQHandler(void) {
 
 uint32_t sdiff;
 int sel;
+int gsel;
+int loop;
+int last_loop;
+uint32_t last_inc = 0;
+uint32_t cycles_per_inc;
 
 int main(void) {
     /* External crystal: 8MHz */
@@ -156,6 +161,7 @@ int main(void) {
     uint16_t last[NCH_IN] = {0};
     uint16_t diff[NCH_IN] = {[0 ... NCH_IN-1]=1500};
     while (42) {
+        loop = get_tick();
         uint32_t stk1 = get_tick();
         uint16_t now = TIM1->CNT;
         uint16_t gpio_vals = GPIOB->IDR;
@@ -183,27 +189,50 @@ int main(void) {
         uint32_t stk2 = get_tick();
         sdiff = (stk1 - stk2) & 0xFFFFFF;
 
-        int d=diff[NCH_IN-1];
-        if (d < 800) {
-            sel = -1;
-        } else if (d < 1333) {
-            sel = 0;
-        } else if (d < 1666) {
-            sel = 1;
-        } else if (d < 2200) {
-            sel = 2;
-        } else {
-            sel = -1;
+        int booldiff[NCH_IN];
+        for (int i=0; i<NCH_IN; i++) {
+            int d=diff[i];
+            if (d < 800) {
+                booldiff[i] = -1;
+            } else if (d < 1333) {
+                booldiff[i] = 0;
+            } else if (d < 1666) {
+                booldiff[i] = 1;
+            } else if (d < 2200) {
+                booldiff[i] = 2;
+            } else {
+                booldiff[i] = -1;
+            }
         }
+        booldiff[0] = booldiff[0] == -1 ? 0 : booldiff[0];
+        booldiff[1] = booldiff[1] == -1 ? 0 : booldiff[1];
+        booldiff[2] = booldiff[2] == -1 ? 0 : booldiff[2];
+        booldiff[3] = booldiff[3] == -1 ? 0 : booldiff[3];
         /* FIXME DEBUG */
-        static int gsel = 0;
-        diff[0] = diff[1] = diff[2] = diff[3] = diff[4];
+        sel = booldiff[NCH_IN-1];
+        /* FIXME DEBUG */
+        gsel = 0;
+        int speed = 0;
+        last_inc += (last_loop-loop)&0xffffff; /* SysTick is a 24-bit down-counter. */
+#define SWITCH_TO_PROP_FULLSCALE_TIME_MS 2000000
+        cycles_per_inc = (SWITCH_TO_PROP_FULLSCALE_TIME_MS/1000) * (SystemCoreClock/1000);
+        if (last_inc > cycles_per_inc) {
+            last_inc = 0;
+            speed = 1;
+        }
+        uint16_t clip(uint16_t val) {
+            if (val > 2000)
+                return 2000;
+            if (val < 1000)
+                return 1000;
+            return val;
+        }
         switch (gsel) {
         case 0:
-            duration_out_write[ 0] = diff[0];
-            duration_out_write[ 1] = diff[1];
-            duration_out_write[ 2] = diff[2];
-            duration_out_write[ 3] = diff[3];
+            duration_out_write[ 0] = clip(duration_out_read[ 0] + (booldiff[0]-1)*speed);
+            duration_out_write[ 1] = clip(duration_out_read[ 1] + (booldiff[1]-1)*speed);
+            duration_out_write[ 2] = diff[ 2];
+            duration_out_write[ 3] = diff[ 3];
             duration_out_write[ 4] = duration_out_read[ 4];
             duration_out_write[ 5] = duration_out_read[ 5];
             duration_out_write[ 6] = duration_out_read[ 6];
@@ -218,10 +247,10 @@ int main(void) {
             duration_out_write[ 1] = duration_out_read[ 1];
             duration_out_write[ 2] = duration_out_read[ 2];
             duration_out_write[ 3] = duration_out_read[ 3];
-            duration_out_write[ 4] = diff[0];
-            duration_out_write[ 5] = diff[1];
-            duration_out_write[ 6] = diff[2];
-            duration_out_write[ 7] = diff[3];
+            duration_out_write[ 4] = clip(duration_out_read[ 0] + booldiff[0]*speed);
+            duration_out_write[ 5] = clip(duration_out_read[ 1] + booldiff[1]*speed);
+            duration_out_write[ 6] = diff[ 2];
+            duration_out_write[ 7] = diff[ 3];
             duration_out_write[ 8] = duration_out_read[ 8];
             duration_out_write[ 9] = duration_out_read[ 9];
             duration_out_write[10] = duration_out_read[10];
@@ -236,10 +265,10 @@ int main(void) {
             duration_out_write[ 5] = duration_out_read[ 5];
             duration_out_write[ 6] = duration_out_read[ 6];
             duration_out_write[ 7] = duration_out_read[ 7];
-            duration_out_write[ 8] = diff[0];
-            duration_out_write[ 9] = diff[1];
-            duration_out_write[10] = diff[2];
-            duration_out_write[11] = diff[3];
+            duration_out_write[ 8] = clip(duration_out_read[ 0] + booldiff[0]*speed);
+            duration_out_write[ 9] = clip(duration_out_read[ 1] + booldiff[1]*speed);
+            duration_out_write[10] = diff[ 2];
+            duration_out_write[11] = diff[ 3];
             break;
         default:
             duration_out_write[ 0] = duration_out_read[ 0];
@@ -259,6 +288,7 @@ int main(void) {
         uint16_t *tmp = duration_out_read;
         duration_out_read = duration_out_write;
         duration_out_write = tmp;
+        last_loop = loop;
     }
 }
 
